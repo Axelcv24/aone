@@ -21,6 +21,7 @@ from typing import Any, TypeVar
 
 from googleapiclient.errors import HttpError
 
+from aone.gmail.normalize import normalize
 from aone.gmail.types import Email
 
 T = TypeVar("T")
@@ -135,6 +136,7 @@ def _parse_message(raw: dict[str, Any]) -> Email:
         subject=headers.get("Subject", ""),
         body_text=body_text,
         body_html=body_html,
+        body_clean=normalize(body_text),
         snippet=raw.get("snippet", ""),
         internal_date=int(raw.get("internalDate", "0")),
         labels=list(raw.get("labelIds", [])),

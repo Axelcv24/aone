@@ -22,6 +22,7 @@ class Email:
     subject: str
     body_text: str
     body_html: str
+    body_clean: str
     snippet: str
     internal_date: int
     labels: list[str]

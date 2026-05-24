@@ -33,8 +33,9 @@ def main() -> None:
         print(f"     Subject: {email.subject}")
         print(f"     Snippet: {email.snippet[:80]}")
         print(
-            f"     Body:    {len(email.body_text)} chars text · "
-            f"{len(email.body_html)} chars html"
+            f"     Body:    {len(email.body_text)} text · "
+            f"{len(email.body_html)} html · "
+            f"{len(email.body_clean)} clean"
         )
         print(f"     Labels:  {email.labels}\n")
 
