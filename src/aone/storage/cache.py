@@ -17,9 +17,9 @@ import tempfile
 from collections import Counter
 from collections.abc import Iterable, Iterator
 from dataclasses import dataclass
-from email.utils import parseaddr
 from pathlib import Path
 
+from aone.gmail.addresses import extract_email_address
 from aone.gmail.types import Email
 
 SCHEMA_VERSION = 1
@@ -180,7 +180,7 @@ class EmailCache:
         dates = [e.internal_date for e in emails if e.internal_date]
         sender_counts: Counter[str] = Counter()
         for e in emails:
-            address = _extract_email_address(e.from_)
+            address = extract_email_address(e.from_)
             if address:
                 sender_counts[address] += 1
 
@@ -191,24 +191,6 @@ class EmailCache:
             top_senders=sender_counts.most_common(top_n),
             disk_size_bytes=_size_of(self._path),
         )
-
-
-def _extract_email_address(from_header: str) -> str:
-    """Extract the bare email address from a ``From:`` header value.
-
-    ``parseaddr`` returns ``(display_name, address)`` and copes with the
-    common shapes: ``"Alice <a@x.com>"``, ``"a@x.com"``, or noisy junk
-    that yields an empty address.
-    """
-    if not from_header:
-        return ""
-    _name, address = parseaddr(from_header)
-    # parseaddr is permissive — it happily returns "just" as an address
-    # for input like "just a name with no email". Require an @ to consider
-    # the value a real email.
-    if "@" not in address:
-        return ""
-    return address.lower()
 
 
 def _size_of(path: Path | None) -> int | None:
