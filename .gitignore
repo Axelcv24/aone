@@ -46,6 +46,6 @@ Thumbs.db
 *.swp
 *.swo
 
-# Local planning artifacts (no forman parte del proyecto)
+# Local planning artifacts (not part of the project)
 aone-jira-import.csv
 aone-jira-board.html

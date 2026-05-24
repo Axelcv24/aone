@@ -6,7 +6,7 @@ Aone is a conversational operations agent for freelancers and SMBs. It ingests G
 
 ## Repository status
 
-**Pre-implementation**: as of this writing the repo only contains `README.md` and `CLAUDE.md`. The directory tree below is the *target* layout — none of it exists on disk yet. When starting work, scaffold what you need rather than assuming files are present.
+Early-stage scaffold. The `src/aone/` package, Typer CLI skeleton, configuration loader, and tests exist; Gmail client, storage layer, LangGraph agent, observability, and evals are still pending (see `PLAN.md`). When starting work on an area that is not yet implemented, scaffold what you need rather than assuming the file exists.
 
 ## Stack and key versions
 
@@ -23,7 +23,7 @@ Aone is a conversational operations agent for freelancers and SMBs. It ingests G
 
 Required environment (free-tier defaults):
 - `GROQ_API_KEY` — generation + classification
-- `LANGFUSE_PUBLIC_KEY` / `LANGFUSE_SECRET_KEY` / `LANGFUSE_HOST` — tracing
+- `LANGFUSE_PUBLIC_KEY` / `LANGFUSE_SECRET_KEY` / `LANGFUSE_HOST` — tracing (optional at config load; required to actually emit traces)
 - Gmail OAuth `credentials.json` in the project root
 
 Optional (only if swapping to paid models): `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `GEMINI_API_KEY`. LiteLLM reads whichever is present based on the model ID configured.
@@ -47,8 +47,9 @@ Tools should be authored to be MCP-compatible from day one (ADR-004) so they can
 ## Target layout
 
 ```
-src/
+src/aone/
   cli.py              # Typer entrypoint
+  config.py           # provider-agnostic configuration (ADR-005)
   agent/              # LangGraph graph + tool implementations
   gmail/              # Gmail API client
   storage/            # EmailCache + FAISS index, pickle/JSON I/O
@@ -58,7 +59,8 @@ tests/
 evals/golden_set.jsonl   # 20+ Q&A with ground truth — drives development
 docs/
   architecture.md
-  decisions/          # ADRs 001–004 (see below)
+  decisions/          # ADRs 001–005 (see below)
+  spikes/             # spike notes (OAuth flow, etc.)
 ```
 
 ## CLI surface (planned)
@@ -68,7 +70,7 @@ docs/
 - `uv run aone stats` — local cache statistics
 - `uv run aone evals` — run the eval suite
 
-Tests run with pytest (`uv run pytest`); use `uv run pytest tests/path/to/test_file.py::test_name` for a single test.
+Tests run with pytest (`uv run pytest`); use `uv run pytest tests/path/to/test_file.py::test_name` for a single test. Lint with `uv run ruff check src/ tests/`.
 
 ## Active ADRs
 
@@ -82,10 +84,7 @@ When making architectural choices that touch any of these, update the ADR rather
 
 ## Working conventions
 
+- **Language**: all code, docs, comments, commit messages, and PR descriptions in **English**. The product itself is multilingual (the agent answers in whichever language the user asks), but the codebase and its documentation are English-only.
 - **Eval-driven development** (Notion AI style): when changing agent behavior, update or add cases in `evals/golden_set.jsonl` first, then iterate on tool/prompt changes until the suite passes. Don't ship agent changes without an eval that locks in the new behavior.
 - **Five-component agent pattern** (Vercel style): keep the classify → select → execute → respond split clean; resist collapsing nodes for convenience.
 - **Roadmap discipline**: v0 is validation-of-concept. Don't preemptively pull in FastAPI, a frontend, multi-tenant auth, or extra connectors (Outlook/Slack) — those are explicitly v1/v2.
-
-## Language note
-
-README and design docs are in Spanish; code identifiers and commit messages should follow standard English conventions.
