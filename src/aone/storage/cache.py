@@ -14,7 +14,10 @@ from __future__ import annotations
 import os
 import pickle
 import tempfile
+from collections import Counter
 from collections.abc import Iterable, Iterator
+from dataclasses import dataclass
+from email.utils import parseaddr
 from pathlib import Path
 
 from aone.gmail.types import Email
@@ -25,6 +28,17 @@ DEFAULT_CACHE_PATH = Path.home() / ".aone" / "cache.pkl"
 
 class CacheSchemaError(RuntimeError):
     """Raised when the on-disk cache has an unrecognised schema version."""
+
+
+@dataclass(frozen=True)
+class CacheStats:
+    """Summary metrics over a cache. Returned by :meth:`EmailCache.stats`."""
+
+    email_count: int
+    earliest_internal_date: int | None
+    latest_internal_date: int | None
+    top_senders: list[tuple[str, int]]
+    disk_size_bytes: int | None
 
 
 class EmailCache:
@@ -38,6 +52,9 @@ class EmailCache:
 
     def __init__(self, emails: dict[str, Email] | None = None) -> None:
         self._emails: dict[str, Email] = dict(emails) if emails else {}
+        # Set by save() / load() / load_or_create() so stats() can report
+        # the file size without the caller having to track the path.
+        self._path: Path | None = None
 
     # ─── Mapping-style read API ────────────────────────────────────
 
@@ -78,7 +95,8 @@ class EmailCache:
         atomic — a reader either sees the old version or the new one,
         never a half-written file.
         """
-        path = path or DEFAULT_CACHE_PATH
+        if path is None:
+            path = self._path or DEFAULT_CACHE_PATH
         path.parent.mkdir(parents=True, exist_ok=True)
 
         payload = {"schema_version": SCHEMA_VERSION, "emails": self._emails}
@@ -98,6 +116,7 @@ class EmailCache:
         except Exception:
             tmp_path.unlink(missing_ok=True)
             raise
+        self._path = path
 
     @classmethod
     def load(cls, path: Path | None = None) -> EmailCache:
@@ -119,7 +138,9 @@ class EmailCache:
                 f"Cache at {path} has schema version {version!r}; "
                 f"expected {SCHEMA_VERSION}. Re-sync to rebuild."
             )
-        return cls(emails=payload["emails"])
+        instance = cls(emails=payload["emails"])
+        instance._path = path
+        return instance
 
     @classmethod
     def load_or_create(cls, path: Path | None = None) -> EmailCache:
@@ -127,4 +148,74 @@ class EmailCache:
         path = path or DEFAULT_CACHE_PATH
         if path.exists():
             return cls.load(path)
-        return cls()
+        instance = cls()
+        instance._path = path
+        return instance
+
+    # ─── Stats ─────────────────────────────────────────────────────
+
+    def stats(self, *, top_n: int = 5) -> CacheStats:
+        """Compute summary statistics over the cached emails.
+
+        ``disk_size_bytes`` is taken from the path the cache was most
+        recently saved to or loaded from. If the cache has never touched
+        disk, the size is ``None``.
+
+        Args:
+            top_n: number of senders to include in ``top_senders``.
+
+        Returns:
+            A :class:`CacheStats` snapshot.
+        """
+        emails = list(self._emails.values())
+        if not emails:
+            return CacheStats(
+                email_count=0,
+                earliest_internal_date=None,
+                latest_internal_date=None,
+                top_senders=[],
+                disk_size_bytes=_size_of(self._path),
+            )
+
+        dates = [e.internal_date for e in emails if e.internal_date]
+        sender_counts: Counter[str] = Counter()
+        for e in emails:
+            address = _extract_email_address(e.from_)
+            if address:
+                sender_counts[address] += 1
+
+        return CacheStats(
+            email_count=len(emails),
+            earliest_internal_date=min(dates) if dates else None,
+            latest_internal_date=max(dates) if dates else None,
+            top_senders=sender_counts.most_common(top_n),
+            disk_size_bytes=_size_of(self._path),
+        )
+
+
+def _extract_email_address(from_header: str) -> str:
+    """Extract the bare email address from a ``From:`` header value.
+
+    ``parseaddr`` returns ``(display_name, address)`` and copes with the
+    common shapes: ``"Alice <a@x.com>"``, ``"a@x.com"``, or noisy junk
+    that yields an empty address.
+    """
+    if not from_header:
+        return ""
+    _name, address = parseaddr(from_header)
+    # parseaddr is permissive — it happily returns "just" as an address
+    # for input like "just a name with no email". Require an @ to consider
+    # the value a real email.
+    if "@" not in address:
+        return ""
+    return address.lower()
+
+
+def _size_of(path: Path | None) -> int | None:
+    """File size in bytes, or ``None`` if the path is unset / missing."""
+    if path is None:
+        return None
+    try:
+        return path.stat().st_size
+    except FileNotFoundError:
+        return None
