@@ -1,0 +1,51 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+dist/
+*.egg-info/
+*.egg
+
+# uv / virtual envs
+.venv/
+.python-version
+
+# Environment & secrets
+.env
+.env.local
+.env.*.local
+
+# Gmail OAuth secrets
+credentials.json
+token.json
+
+# Aone local data (cache + index)
+.aone/
+*.pkl
+*.faiss
+
+# Eval outputs
+evals/results/
+
+# Test / lint caches
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+htmlcov/
+.coverage
+.coverage.*
+
+# IDE / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+
+# Local planning artifacts (no forman parte del proyecto)
+aone-jira-import.csv
+aone-jira-board.html
