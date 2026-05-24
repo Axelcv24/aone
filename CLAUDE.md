@@ -12,26 +12,32 @@ Aone is a conversational operations agent for freelancers and SMBs. It ingests G
 
 - Python 3.12 — all dependencies managed via `uv` (never pip/poetry)
 - LangGraph for agent orchestration (state machine, not flat LangChain)
-- LiteLLM as the model wrapper, fronting two models:
-  - `claude-sonnet-4-6` (Anthropic) — primary reasoning / generation
-  - `gpt-4o-mini` (OpenAI) — intent classification (cheaper hop)
+- **LiteLLM** as the model wrapper. v0 defaults to 100% free providers; all model IDs come from env vars so swapping to paid models (Claude, GPT-4o, etc.) is a `.env` change, not a code change. See ADR-005.
+  - Generation (default): `groq/llama-3.3-70b-versatile` (Groq free tier)
+  - Classification (default): `groq/llama-3.1-8b-instant` (Groq free tier)
+- **Embeddings** via local `sentence-transformers/all-MiniLM-L6-v2` by default (free, runs on CPU). Switchable to LiteLLM-routed embeddings (OpenAI/Voyage/etc.) via `AONE_EMBEDDING_PROVIDER=litellm`.
 - FAISS in-memory vector index (no Pinecone/Qdrant in v0 — see ADR-002)
 - Gmail API via OAuth desktop flow (requires `credentials.json` in repo root)
-- Langfuse for tracing/observability
+- Langfuse Cloud free tier for tracing/observability (50k events/mo). Self-hosted is an option if we outgrow it.
 - Typer for the CLI entrypoint
 
-Required environment: API keys for Anthropic + OpenAI in `.env` (copied from `.env.example`), and Gmail OAuth `credentials.json` in the project root.
+Required environment (free-tier defaults):
+- `GROQ_API_KEY` — generation + classification
+- `LANGFUSE_PUBLIC_KEY` / `LANGFUSE_SECRET_KEY` / `LANGFUSE_HOST` — tracing
+- Gmail OAuth `credentials.json` in the project root
+
+Optional (only if swapping to paid models): `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `GEMINI_API_KEY`. LiteLLM reads whichever is present based on the model ID configured.
 
 ## Architecture
 
-Single pipeline, four LangGraph nodes:
+Single pipeline, four LangGraph nodes. Models referenced by env var, not hardcoded:
 
 ```
 CLI (Typer)
-  → classify_intent (gpt-4o-mini)
+  → classify_intent      (AONE_MODEL_CLASSIFICATION, default groq/llama-3.1-8b-instant)
   → select_tools
-  → execute_tools           ← MCP-compatible tool surface (ADR-004)
-  → generate_response (claude-sonnet-4-6)
+  → execute_tools        ← MCP-compatible tool surface (ADR-004)
+  → generate_response    (AONE_MODEL_GENERATION, default groq/llama-3.3-70b-versatile)
 ```
 
 Data layer is deliberately **persistence-free** in v0 (ADR-001): an in-memory `EmailCache` dict plus a FAISS index, both serialized to pickle/JSON between runs. Postgres + pgvector migration is reserved for v1 and is documented in `docs/decisions/`.
@@ -70,6 +76,7 @@ Tests run with pytest (`uv run pytest`); use `uv run pytest tests/path/to/test_f
 - **002** — FAISS in-memory (not Pinecone/Qdrant) for v0
 - **003** — LangGraph over flat LangChain
 - **004** — MCP-ready tool surface from the start
+- **005** — Model-agnostic stack: providers/models come from env vars, LiteLLM routes them. v0 defaults are 100% free (Groq + local sentence-transformers); paid models (Claude, GPT, Gemini) are a `.env` swap.
 
 When making architectural choices that touch any of these, update the ADR rather than silently diverging.
 

@@ -20,13 +20,30 @@ $ aone ask "¿qué clientes no me han respondido en más de 30 días?"
 
 ## Stack
 
+v0 corre **100% gratis** por defecto, pero la arquitectura es agnóstica al proveedor: cambiar a modelos de pago (Claude, GPT, Gemini) es solo editar `.env` (ver [ADR-005](./docs/decisions/005-model-agnostic-stack.md)).
+
 - **Python 3.12** + **uv** para gestión de dependencias
 - **LangGraph** para orquestación del agente
-- **Claude Sonnet 4.6** (Anthropic) como modelo principal
-- **GPT-4o-mini** para clasificación de intención (más barato)
+- **LiteLLM** como wrapper de modelos (rutea por proveedor según env vars)
+- **Groq** (free tier) — `llama-3.3-70b-versatile` para generación, `llama-3.1-8b-instant` para clasificación
+- **`sentence-transformers/all-MiniLM-L6-v2`** local para embeddings (cero costo, corre en CPU)
 - **FAISS** para búsqueda semántica in-memory
 - **Gmail API** para acceso a correos
-- **Langfuse** para tracing y observabilidad
+- **Langfuse Cloud** (free tier, 50k events/mes) para tracing y observabilidad
+
+### Cambiar a modelos de pago (opcional)
+
+```bash
+# .env — ejemplo con Claude + OpenAI
+AONE_MODEL_GENERATION=anthropic/claude-haiku-4-5
+AONE_MODEL_CLASSIFICATION=openai/gpt-4o-mini
+AONE_EMBEDDING_PROVIDER=litellm
+AONE_EMBEDDING_MODEL=openai/text-embedding-3-small
+ANTHROPIC_API_KEY=sk-ant-...
+OPENAI_API_KEY=sk-...
+```
+
+Sin recompilar, sin tocar código.
 
 ## Arquitectura
 
@@ -58,7 +75,8 @@ Diseño explícitamente sin base de datos en v0. Toda la persistencia es local (
 ### Pre-requisitos
 - Python 3.12+
 - [uv](https://docs.astral.sh/uv/) instalado
-- API keys de [Anthropic](https://console.anthropic.com) y [OpenAI](https://platform.openai.com)
+- API key gratis de [Groq](https://console.groq.com)
+- Cuenta gratis en [Langfuse Cloud](https://cloud.langfuse.com) (public + secret key)
 - OAuth credentials de [Google Cloud Console](https://console.cloud.google.com) (Gmail API habilitada)
 
 ### Setup
@@ -120,6 +138,7 @@ Documentadas como ADRs en `docs/decisions/`:
 - **002**: FAISS in-memory sobre Pinecone/Qdrant para v0
 - **003**: LangGraph sobre LangChain plano
 - **004**: MCP-ready architecture para tools
+- **005**: Stack de modelos agnóstico (LiteLLM + env vars). Defaults free, swap a paid sin tocar código
 
 ## Métricas (v0.1.0)
 

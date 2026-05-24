@@ -36,14 +36,14 @@ Por dependencia técnica y por nivel de "puedo demostrar algo": al cierre de cad
 - **Tipo**: TASK · **Prioridad**: P0 · **Pts**: 1 · **Depende de**: —
 - **AC**: repo público con `LICENSE` (MIT), `README.md` movido, descripción y topics (`langgraph`, `agents`, `gmail`, `claude`, `python`).
 
-### AONE-102 · Conseguir y validar API tokens
+### AONE-102 · Conseguir y validar API tokens (stack gratis)
 - **Tipo**: TASK · **Prioridad**: P0 · **Pts**: 2 · **Depende de**: —
-- **Descripción**: Crear cuentas/proyectos en:
-  - Anthropic Console → API key con acceso a `claude-sonnet-4-6`
-  - OpenAI Platform → API key con acceso a `gpt-4o-mini` y `text-embedding-3-small`
-  - Langfuse Cloud → proyecto + public/secret key
-  - Google Cloud Console → proyecto, habilitar Gmail API, crear OAuth 2.0 Client ID tipo *Desktop app* → descargar `credentials.json`
-- **AC**: archivo `.env` local funciona; smoke test `curl` o `litellm completion` responde con cada modelo; `credentials.json` en raíz (gitignored).
+- **Descripción**: Crear cuentas/proyectos:
+  - **Groq Console** (https://console.groq.com) → API key. Validar acceso a `llama-3.3-70b-versatile` y `llama-3.1-8b-instant`.
+  - **Langfuse Cloud** (https://cloud.langfuse.com) → proyecto + public/secret key + host URL.
+  - **Google Cloud Console** → proyecto, habilitar Gmail API, crear OAuth 2.0 Client ID tipo *Desktop app* → descargar `credentials.json`.
+- **AC**: `.env` local funciona; smoke test `litellm completion` con `groq/llama-3.3-70b-versatile` responde; `credentials.json` en raíz (gitignored).
+- **Opcional (post-v0, no bloquea)**: Anthropic / OpenAI / Gemini keys si se quiere comparar contra modelos pagos.
 
 ### AONE-103 · Inicializar proyecto con `uv`
 - **Tipo**: TASK · **Prioridad**: P0 · **Pts**: 2 · **Depende de**: AONE-101
@@ -51,7 +51,7 @@ Por dependencia técnica y por nivel de "puedo demostrar algo": al cierre de cad
 
 ### AONE-104 · Configurar dependencias base
 - **Tipo**: TASK · **Prioridad**: P0 · **Pts**: 2 · **Depende de**: AONE-103
-- **Descripción**: Core: `langgraph`, `litellm`, `faiss-cpu`, `typer`, `google-api-python-client`, `google-auth-oauthlib`, `langfuse`, `python-dotenv`. Dev: `pytest`, `pytest-asyncio`, `ruff`, `mypy`.
+- **Descripción**: Core: `langgraph`, `litellm`, `faiss-cpu`, `sentence-transformers`, `typer`, `google-api-python-client`, `google-auth-oauthlib`, `langfuse`, `python-dotenv`. Dev: `pytest`, `pytest-asyncio`, `ruff`, `mypy`.
 - **AC**: `uv lock` reproducible; `uv run pytest` arranca; `uv run ruff check src/` pasa.
 
 ### AONE-105 · Crear estructura de directorios objetivo
@@ -59,9 +59,15 @@ Por dependencia técnica y por nivel de "puedo demostrar algo": al cierre de cad
 - **AC**: `src/{cli,agent,gmail,storage,llm,observability}/__init__.py`, `tests/`, `evals/`, `docs/decisions/`, `.github/` creados.
 
 ### AONE-106 · `.env.example` y `src/config.py`
-- **Tipo**: TASK · **Prioridad**: P0 · **Pts**: 1 · **Depende de**: AONE-104
-- **Descripción**: `.env.example` lista todas las vars; `config.py` las carga con `python-dotenv` y valida presencia con mensajes claros.
-- **AC**: arrancar sin `.env` falla con error legible que dice qué falta.
+- **Tipo**: TASK · **Prioridad**: P0 · **Pts**: 2 · **Depende de**: AONE-104
+- **Descripción**: `.env.example` lista todas las vars; `config.py` las carga con `python-dotenv` y valida presencia con mensajes claros. **Diseño agnóstico**: los modelos vienen de env, no hardcodeados (ver ADR-005).
+- **Variables**:
+  - Requeridas v0: `GROQ_API_KEY`, `LANGFUSE_PUBLIC_KEY`, `LANGFUSE_SECRET_KEY`, `LANGFUSE_HOST`
+  - Modelos (con defaults): `AONE_MODEL_GENERATION=groq/llama-3.3-70b-versatile`, `AONE_MODEL_CLASSIFICATION=groq/llama-3.1-8b-instant`
+  - Embeddings (con defaults): `AONE_EMBEDDING_PROVIDER=local`, `AONE_EMBEDDING_MODEL=sentence-transformers/all-MiniLM-L6-v2`
+  - Otros: `AONE_SYNC_LIMIT=500`
+  - Opcionales (post-v0): `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `GEMINI_API_KEY`
+- **AC**: arrancar sin `.env` falla con error legible que dice qué falta; cambiar `AONE_MODEL_GENERATION` a otro provider funciona si su API key está presente.
 
 ### AONE-107 · Devcontainer + Dockerfile
 - **Tipo**: TASK · **Prioridad**: P0 · **Pts**: 3 · **Depende de**: AONE-104
@@ -88,10 +94,10 @@ Por dependencia técnica y por nivel de "puedo demostrar algo": al cierre de cad
 - **Descripción**: Documentar branching (`feat/`, `fix/`, `chore/`), conventional commits, cómo correr tests/evals, cómo abrir PR.
 - **AC**: `CONTRIBUTING.md` en raíz cubre los 5 escenarios anteriores con comandos copiables.
 
-### AONE-112 · Escribir los ADRs 001-004
+### AONE-112 · Escribir los ADRs 001-005
 - **Tipo**: TASK · **Prioridad**: P1 · **Pts**: 3 · **Depende de**: AONE-105
 - **Descripción**: Materializar los ADRs ya referenciados en `CLAUDE.md` como archivos individuales en `docs/decisions/` con formato Context / Decision / Consequences.
-- **AC**: `001-no-db-v0.md`, `002-faiss-in-memory.md`, `003-langgraph-over-langchain.md`, `004-mcp-ready-tools.md` existen y están enlazados desde `README.md`.
+- **AC**: `001-no-db-v0.md`, `002-faiss-in-memory.md`, `003-langgraph-over-langchain.md`, `004-mcp-ready-tools.md`, `005-model-agnostic-stack.md` existen y están enlazados desde `README.md`. ADR-005 detalla: defaults free (Groq + sentence-transformers locales), routing via LiteLLM, env vars como contrato.
 
 ---
 
@@ -129,19 +135,23 @@ Por dependencia técnica y por nivel de "puedo demostrar algo": al cierre de cad
 - **Descripción**: `src/storage/cache.py` — `EmailCache` (dict[id → Email]) + `save()`/`load()` sobre `~/.aone/cache.pkl`.
 - **AC**: idempotente (re-sync no duplica); `save()` atómico (tmpfile + rename); versionado de schema rompe limpio si cambia.
 
-### AONE-302 · Índice FAISS in-memory
+### AONE-302 · Índice FAISS in-memory + capa de embeddings agnóstica
 - **Tipo**: STORY · **Prioridad**: P0 · **Pts**: 5 · **Depende de**: AONE-301
-- **Descripción**: `src/storage/vector.py` envolviendo FAISS `IndexFlatL2`. Embeddings con `text-embedding-3-small` via LiteLLM. Persiste a `~/.aone/index.faiss` + `meta.json` (mapping pos↔id).
-- **AC**: `add(email)` y `search(query, k)` funcionan; recarga desde disco preserva orden; similitud > 0.7 para query relevante de muestra.
+- **Descripción**: `src/storage/vector.py` envolviendo FAISS `IndexFlatL2`. **Capa de embeddings agnóstica** (`src/llm/embeddings.py`) que soporta dos providers según `AONE_EMBEDDING_PROVIDER`:
+  - `local` (default v0) → `sentence-transformers/all-MiniLM-L6-v2` (384 dims, CPU, gratis)
+  - `litellm` → cualquier modelo soportado por LiteLLM (OpenAI, Voyage, Cohere, etc.)
+  
+  Persiste a `~/.aone/index.faiss` + `meta.json` (mapping pos↔id + dims + provider usado).
+- **AC**: `add(email)` y `search(query, k)` funcionan con ambos providers; recarga preserva orden; similitud > 0.7 en sample relevante; cambiar de `local` a `litellm` requiere re-indexar (validar que se detecte y avise).
 
 ### AONE-303 · Estadísticas del cache
 - **Tipo**: TASK · **Prioridad**: P2 · **Pts**: 1 · **Depende de**: AONE-301, AONE-302
 - **Descripción**: `stats()` con: nº correos, fecha más antigua/reciente, top 5 remitentes, tamaño en disco.
 
-### AONE-304 · Wrapper LiteLLM con routing por modelo
+### AONE-304 · Wrapper LiteLLM agnóstico al proveedor
 - **Tipo**: STORY · **Prioridad**: P0 · **Pts**: 3 · **Depende de**: AONE-106
-- **Descripción**: `src/llm/client.py` — `complete(model, messages, **kwargs)` para Claude y GPT-4o-mini.
-- **AC**: streaming + non-streaming; retry con backoff; tests con respuestas grabadas (VCR o stub).
+- **Descripción**: `src/llm/client.py` — `complete(messages, model=None, **kwargs)`. Si `model=None` lo lee de `AONE_MODEL_GENERATION` (o de un parámetro `role` que mapee a `generation`/`classification`). LiteLLM ya soporta Groq, Anthropic, OpenAI, Gemini, etc. con la misma firma — el wrapper solo añade: lectura de config, retry, instrumentación Langfuse.
+- **AC**: streaming + non-streaming; retry con backoff; cambiar `AONE_MODEL_GENERATION` de `groq/llama-3.3-70b-versatile` a `anthropic/claude-haiku-4-5` funciona sin tocar código si la API key correspondiente está presente; tests con respuestas grabadas para Groq + un provider alternativo (mock).
 
 ---
 
@@ -151,7 +161,8 @@ Por dependencia técnica y por nivel de "puedo demostrar algo": al cierre de cad
 
 ### AONE-401 · Nodo `classify_intent`
 - **Tipo**: STORY · **Prioridad**: P0 · **Pts**: 3 · **Depende de**: AONE-304
-- **AC**: ≥85% accuracy en 20 ejemplos sembrados; intents: `summarize`, `find_emails`, `aggregate_amounts`, `list_contacts`, `general_qa`.
+- **Descripción**: Usa el wrapper con `role="classification"` → resuelve a `AONE_MODEL_CLASSIFICATION` (default `groq/llama-3.1-8b-instant`). Intents: `summarize`, `find_emails`, `aggregate_amounts`, `list_contacts`, `general_qa`.
+- **AC**: ≥85% accuracy en 20 ejemplos sembrados con el modelo default; cambiar a otro modelo en `.env` no requiere editar este nodo.
 
 ### AONE-402 · Nodo `select_tools`
 - **Tipo**: STORY · **Prioridad**: P0 · **Pts**: 3 · **Depende de**: AONE-401
@@ -169,10 +180,11 @@ Por dependencia técnica y por nivel de "puedo demostrar algo": al cierre de cad
 
 ### AONE-406 · Tool `aggregate_amounts`
 - **Tipo**: STORY · **Prioridad**: P1 · **Pts**: 5 · **Depende de**: AONE-403
-- **Descripción**: Extrae montos monetarios y los suma por contacto/fecha. Regex + validación con Claude.
+- **Descripción**: Extrae montos monetarios y los suma por contacto/fecha. Regex + validación via wrapper LLM (`role="generation"`).
 
 ### AONE-407 · Tool `summarize_thread`
 - **Tipo**: STORY · **Prioridad**: P1 · **Pts**: 3 · **Depende de**: AONE-404
+- **Descripción**: Resume hilo o conjunto de correos via wrapper LLM (`role="generation"`, default `groq/llama-3.3-70b-versatile`).
 
 ### AONE-408 · Nodo `execute_tools`
 - **Tipo**: STORY · **Prioridad**: P0 · **Pts**: 3 · **Depende de**: AONE-403, AONE-404, AONE-405, AONE-406, AONE-407
@@ -180,7 +192,8 @@ Por dependencia técnica y por nivel de "puedo demostrar algo": al cierre de cad
 
 ### AONE-409 · Nodo `generate_response`
 - **Tipo**: STORY · **Prioridad**: P0 · **Pts**: 3 · **Depende de**: AONE-408
-- **AC**: respuestas citan correos por subject/fecha cuando aplica.
+- **Descripción**: Genera respuesta final via wrapper LLM (`role="generation"`, default Llama 3.3 70B via Groq) consumiendo el estado acumulado.
+- **AC**: respuestas citan correos por subject/fecha cuando aplica; cambiar `AONE_MODEL_GENERATION` no rompe el nodo.
 
 ### AONE-410 · Ensamblar el grafo LangGraph
 - **Tipo**: STORY · **Prioridad**: P0 · **Pts**: 3 · **Depende de**: AONE-401, AONE-402, AONE-408, AONE-409
