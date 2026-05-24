@@ -1,7 +1,7 @@
 [project]
 name = "aone"
 version = "0.1.0"
-description = "Agente conversacional de operaciones para freelancers y PYMES. Procesa correos de Gmail y responde preguntas de negocio en lenguaje natural desde la terminal."
+description = "Conversational operations agent for freelancers and SMBs. Processes Gmail messages and answers business questions in natural language from the terminal."
 readme = "README.md"
 license = { file = "LICENSE" }
 requires-python = ">=3.12"
@@ -14,6 +14,14 @@ classifiers = [
     "Operating System :: OS Independent",
 ]
 dependencies = [
+    "faiss-cpu>=1.14.2",
+    "google-api-python-client>=2.196.0",
+    "google-auth-oauthlib>=1.4.0",
+    "langfuse>=4.6.1",
+    "langgraph>=1.2.1",
+    "litellm>=1.86.0",
+    "python-dotenv>=1.2.2",
+    "sentence-transformers>=5.5.1",
     "typer>=0.15",
 ]
 
@@ -30,3 +38,11 @@ build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/aone"]
+
+[dependency-groups]
+dev = [
+    "mypy>=2.1.0",
+    "pytest>=9.0.3",
+    "pytest-asyncio>=1.3.0",
+    "ruff>=0.15.14",
+]
