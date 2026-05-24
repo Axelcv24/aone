@@ -1,9 +1,8 @@
-"""AONE-201 spike validation demo.
+"""End-to-end validation script: OAuth + Gmail client.
 
-Runs the OAuth flow (browser opens on the first run) and prints metadata
-for the last 5 messages in the authenticated user's Gmail inbox. No
-persistence — this script only proves the OAuth + Gmail API path works
-end to end.
+Lists the 5 most recent messages in the authenticated user's mailbox and
+prints the parsed ``Email`` fields. Used to manually validate the work
+from AONE-201 (OAuth), AONE-202 (auth tests), and AONE-203 (client).
 
 Run with::
 
@@ -13,37 +12,31 @@ Run with::
 from __future__ import annotations
 
 from aone.gmail.auth import get_service
+from aone.gmail.client import get_message, list_messages
 
 
 def main() -> None:
     print("Connecting to Gmail (the browser will open on the first run)…")
     service = get_service()
-    print("Connected. Fetching the 5 most recent message IDs…\n")
+    print("Connected. Listing the 5 most recent message IDs…\n")
 
-    result = service.users().messages().list(userId="me", maxResults=5).execute()
-    messages = result.get("messages", [])
-
-    if not messages:
+    ids = list_messages(service, limit=5)
+    if not ids:
         print("No messages found in this account.")
         return
 
-    for i, msg_ref in enumerate(messages, start=1):
-        full = (
-            service.users()
-            .messages()
-            .get(
-                userId="me",
-                id=msg_ref["id"],
-                format="metadata",
-                metadataHeaders=["From", "Subject", "Date"],
-            )
-            .execute()
+    for i, message_id in enumerate(ids, start=1):
+        email = get_message(service, message_id)
+        print(f"  {i}. id={email.id}")
+        print(f"     From:    {email.from_}")
+        print(f"     To:      {', '.join(email.to) if email.to else '(none)'}")
+        print(f"     Subject: {email.subject}")
+        print(f"     Snippet: {email.snippet[:80]}")
+        print(
+            f"     Body:    {len(email.body_text)} chars text · "
+            f"{len(email.body_html)} chars html"
         )
-        headers = {h["name"]: h["value"] for h in full["payload"]["headers"]}
-        print(f"  {i}. id={msg_ref['id']}")
-        print(f"     From:    {headers.get('From', '(missing)')}")
-        print(f"     Subject: {headers.get('Subject', '(missing)')}")
-        print(f"     Date:    {headers.get('Date', '(missing)')}\n")
+        print(f"     Labels:  {email.labels}\n")
 
 
 if __name__ == "__main__":
