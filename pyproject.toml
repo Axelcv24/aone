@@ -39,6 +39,11 @@ build-backend = "hatchling.build"
 [tool.hatch.build.targets.wheel]
 packages = ["src/aone"]
 
+[tool.pytest.ini_options]
+markers = [
+    "integration: tests that call real external services (e.g. Groq) — slower, may be skipped without an API key",
+]
+
 [dependency-groups]
 dev = [
     "mypy>=2.1.0",

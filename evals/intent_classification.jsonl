@@ -1,0 +1,21 @@
+{"question": "¿cuánto me debe Acme?", "expected_intent": "aggregate_amounts", "notes": "spanish, direct money question"}
+{"question": "What's my total outstanding balance?", "expected_intent": "aggregate_amounts", "notes": "english, totals"}
+{"question": "Suma todas las facturas vencidas", "expected_intent": "aggregate_amounts", "notes": "spanish, explicit sum"}
+{"question": "How much did I pay Beta Inc last month?", "expected_intent": "aggregate_amounts", "notes": "english, money + temporal filter"}
+{"question": "balance per client", "expected_intent": "aggregate_amounts", "notes": "english, terse, grouping"}
+{"question": "Resúmeme mis conversaciones con Acme este mes", "expected_intent": "summarize", "notes": "spanish, recap"}
+{"question": "summarize the thread about the Q3 budget", "expected_intent": "summarize", "notes": "english, thread summary"}
+{"question": "¿De qué hablamos con Gamma esta semana?", "expected_intent": "summarize", "notes": "spanish, what happened"}
+{"question": "give me a quick recap of the Beta project emails", "expected_intent": "summarize", "notes": "english, recap"}
+{"question": "Find emails about the new contract", "expected_intent": "find_emails", "notes": "english, retrieve by topic"}
+{"question": "Muéstrame correos de billing@acme.com", "expected_intent": "find_emails", "notes": "spanish, retrieve by sender"}
+{"question": "Show me messages with attachments from Beta", "expected_intent": "find_emails", "notes": "english, retrieve with filter"}
+{"question": "Busca emails de la semana pasada sobre el proyecto X", "expected_intent": "find_emails", "notes": "spanish, retrieve with temporal filter"}
+{"question": "¿Quiénes son mis top 10 clientes?", "expected_intent": "list_contacts", "notes": "spanish, ranking contacts"}
+{"question": "Which contacts haven't responded in 30 days?", "expected_intent": "list_contacts", "notes": "english, inactive contacts"}
+{"question": "Lista los remitentes más activos", "expected_intent": "list_contacts", "notes": "spanish, active senders"}
+{"question": "Show me my inactive clients", "expected_intent": "list_contacts", "notes": "english, inactive contacts"}
+{"question": "Hello", "expected_intent": "general_qa", "notes": "english, greeting"}
+{"question": "¿Qué puedes hacer?", "expected_intent": "general_qa", "notes": "spanish, capability question"}
+{"question": "What's new in my inbox?", "expected_intent": "general_qa", "notes": "english, status question, deliberately ambiguous"}
+{"question": "How does Aone work?", "expected_intent": "general_qa", "notes": "english, meta question"}
