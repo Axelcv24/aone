@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import typer
 from rich.console import Console
+from rich.panel import Panel
 from rich.progress import (
     BarColumn,
     Progress,
@@ -11,8 +12,11 @@ from rich.progress import (
     TimeElapsedColumn,
 )
 
+from aone.agent.graph import ask as agent_ask
+from aone.agent.graph import build_agent
 from aone.config import ConfigError, load_config
 from aone.gmail.auth import GmailAuthError, get_service
+from aone.llm.client import LLMClient
 from aone.llm.embeddings import get_embedder
 from aone.storage.cache import DEFAULT_CACHE_PATH, EmailCache
 from aone.storage.vector import (
@@ -124,9 +128,78 @@ def sync(
 
 
 @app.command()
-def ask(question: str = typer.Argument(..., help="Question for the agent.")) -> None:
+def ask(
+    question: str = typer.Argument(..., help="Question for the agent."),
+    show_metadata: bool = typer.Option(
+        True,
+        "--metadata/--no-metadata",
+        help="Show intent, tools used, citations, and token cost after the answer.",
+    ),
+) -> None:
     """Ask the agent a question about your emails."""
-    raise NotImplementedError("AONE-502 — pending in Sprint 5")
+    try:
+        config = load_config()
+    except ConfigError as exc:
+        _console.print(f"[red]Configuration error:[/red] {exc}")
+        raise typer.Exit(code=1) from exc
+
+    if not DEFAULT_CACHE_PATH.exists():
+        _console.print(
+            "[yellow]No cache yet.[/yellow] Run [bold]`aone sync`[/bold] first "
+            "to load messages from Gmail."
+        )
+        raise typer.Exit(code=1)
+
+    cache = EmailCache.load(DEFAULT_CACHE_PATH)
+    if len(cache) == 0:
+        _console.print(
+            "[yellow]Cache is empty.[/yellow] Run [bold]`aone sync`[/bold] to load "
+            "messages from Gmail."
+        )
+        raise typer.Exit(code=1)
+
+    embedder = get_embedder(config.embedding_provider, config.embedding_model)
+    try:
+        index = VectorIndex.load(embedder, DEFAULT_INDEX_PATH)
+    except (FileNotFoundError, VectorIndexError) as exc:
+        _console.print(
+            f"[red]Index unavailable:[/red] {exc}\n"
+            "Run [bold]`aone sync`[/bold] to rebuild it."
+        )
+        raise typer.Exit(code=1) from exc
+
+    llm = LLMClient(config=config)
+    agent = build_agent(cache, index, llm)
+
+    with _console.status("[bold cyan]Thinking…[/bold cyan]", spinner="dots"):
+        response = agent_ask(agent, question)
+
+    _console.print()
+    _console.print(
+        Panel(
+            response.text,
+            title=f"[bold]Q:[/bold] {question}",
+            title_align="left",
+            border_style="cyan",
+            padding=(1, 2),
+        )
+    )
+
+    if show_metadata:
+        tools = ", ".join(response.tools_used) or "(none)"
+        citations = (
+            ", ".join(response.citations[:5]) + ("…" if len(response.citations) > 5 else "")
+            if response.citations
+            else "(none)"
+        )
+        model = response.model or "(no LLM call)"
+        _console.print(
+            f"  [dim]intent:[/dim]    {response.intent.value}\n"
+            f"  [dim]tools:[/dim]     {tools}\n"
+            f"  [dim]citations:[/dim] {citations}\n"
+            f"  [dim]model:[/dim]     {model} "
+            f"[dim]({response.total_tokens} tokens)[/dim]"
+        )
 
 
 @app.command()
