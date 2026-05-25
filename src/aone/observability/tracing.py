@@ -31,10 +31,16 @@ from __future__ import annotations
 
 import logging
 import os
+from typing import Any
 
-from langfuse import observe
+from langfuse import get_client, observe
 
 from aone.config import Config, load_config
+
+# Bumped alongside meaningful agent behaviour changes — surfaces in
+# Langfuse metadata so post-hoc analysis can correlate quality with
+# a specific build of the agent.
+AONE_AGENT_VERSION = "0.1.0-dev"
 
 _logger = logging.getLogger(__name__)
 _initialized = False
@@ -89,6 +95,23 @@ def is_initialized() -> bool:
     return _initialized
 
 
+def tag_current_span(**metadata: Any) -> None:
+    """Attach metadata to the currently-active Langfuse span.
+
+    Safe to call from inside an ``@observe``-decorated function — when
+    Langfuse isn't initialised the call is a no-op. Used by the agent
+    nodes to surface intent, tools used, model id, session id, and
+    agent version in the Langfuse UI so traces can be filtered and
+    correlated post-hoc.
+    """
+    if not _initialized:
+        return
+    try:
+        get_client().update_current_span(metadata=metadata)
+    except Exception:  # noqa: BLE001 — observability must never break the call
+        _logger.debug("Failed to tag current span", exc_info=True)
+
+
 def _reset_for_tests() -> None:
     """Test-only helper: drop the cached init flag so ``init_tracing``
     runs again. Tests use this between cases."""
@@ -96,4 +119,10 @@ def _reset_for_tests() -> None:
     _initialized = False
 
 
-__all__ = ["init_tracing", "is_initialized", "observe"]
+__all__ = [
+    "AONE_AGENT_VERSION",
+    "init_tracing",
+    "is_initialized",
+    "observe",
+    "tag_current_span",
+]

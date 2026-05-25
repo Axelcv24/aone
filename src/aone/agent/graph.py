@@ -21,6 +21,7 @@ file is the contract between them.
 
 from __future__ import annotations
 
+import uuid
 from typing import TypedDict
 
 from langgraph.graph import END, START, StateGraph
@@ -32,7 +33,7 @@ from aone.agent.intents import Intent
 from aone.agent.respond import AgentResponse, GenerateResponse
 from aone.agent.select_tools import select_tools
 from aone.llm.client import LLMClient
-from aone.observability.tracing import observe
+from aone.observability.tracing import AONE_AGENT_VERSION, observe, tag_current_span
 from aone.storage.cache import EmailCache
 from aone.storage.vector import VectorIndex
 
@@ -126,5 +127,18 @@ def ask(agent: CompiledStateGraph, question: str) -> AgentResponse:
     Convenience for callers that don't care about the intermediate
     state — the CLI's ``aone ask`` (AONE-502) uses this.
     """
+    session_id = uuid.uuid4().hex[:12]
+    tag_current_span(
+        session_id=session_id,
+        aone_version=AONE_AGENT_VERSION,
+    )
     final_state: AgentState = agent.invoke({"question": question})  # type: ignore[assignment]
-    return final_state["response"]
+    response = final_state["response"]
+    tag_current_span(
+        intent=response.intent.value,
+        tools_used=response.tools_used,
+        model=response.model,
+        total_tokens=response.total_tokens,
+        citation_count=len(response.citations),
+    )
+    return response

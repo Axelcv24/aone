@@ -84,6 +84,26 @@ def test_observe_passes_through_arguments_and_return() -> None:
     assert echo("hi", 1, c=1.5) == {"a": "hi", "b": 1, "c": 1.5}
 
 
+def test_tag_current_span_is_noop_when_not_initialised() -> None:
+    """The helper must NEVER raise even when Langfuse is off."""
+    assert tracing.is_initialized() is False
+    tracing.tag_current_span(foo="bar", count=3)  # no exception
+
+
+def test_tag_current_span_swallows_sdk_errors(monkeypatch: pytest.MonkeyPatch) -> None:
+    """If Langfuse SDK errors out (offline, auth, …), the agent keeps running."""
+    monkeypatch.delenv("LANGFUSE_PUBLIC_KEY", raising=False)
+    tracing.init_tracing(_config(with_langfuse=True))
+
+    class _Boom:
+        def update_current_span(self, **_: object) -> None:
+            raise RuntimeError("simulated transport failure")
+
+    monkeypatch.setattr(tracing, "get_client", lambda: _Boom())
+    # Must not raise.
+    tracing.tag_current_span(any="thing")
+
+
 def test_init_tracing_loads_default_config_when_none_passed(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
