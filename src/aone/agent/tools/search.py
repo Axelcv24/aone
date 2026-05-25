@@ -74,31 +74,28 @@ class SearchEmails:
         if not query or k <= 0:
             return []
 
-        # When the caller knows the exact sender they want, FAISS is
-        # the wrong layer to filter at: marketing emails from
-        # ``info@mail.levi.com`` are unlikely to be in the top-50
-        # semantic neighbours of "Levi's invoices" because the bodies
-        # never contain the word "factura". Walk the cache directly
-        # for an exact sender hit, then sort newest-first.
-        if sender and "@" in sender:
-            candidates = [
-                email
-                for email in self._cache
-                if _matches_filters(
-                    email, sender, date_from_ms, date_to_ms, label
-                )
-            ]
-            candidates.sort(key=lambda e: e.internal_date, reverse=True)
-            return candidates[:k]
-
-        # Substring senders, date/label-only filters, or pure semantic
-        # search → FAISS path with a slightly larger pool to leave room
-        # for filter pruning.
         has_filter = any(
             f is not None
             for f in (sender, date_from_ms, date_to_ms, label)
         )
-        pool_size = max(k * 5, 50) if has_filter else k
+
+        # Pool sizing: when a structural filter is active (sender,
+        # date, label), we need a big enough candidate pool that the
+        # filter can find the right matches. Specifically the bug we
+        # caught: 50-candidate semantic pool didn't contain Levi
+        # marketing emails (they're not semantically near "facturas"),
+        # so the sender filter had nothing to keep.
+        #
+        # Fix: when filtering, ask FAISS for up to 1000 candidates
+        # (capped at index size). That way semantic ranking still
+        # decides ORDER within the filtered subset — so "Levi's order
+        # confirmation #318900206" surfaces the actual confirmation
+        # email above generic marketing — but the candidate pool is
+        # broad enough that filtered senders aren't starved.
+        if has_filter:
+            pool_size = min(len(self._index), max(k * 5, 1000))
+        else:
+            pool_size = k
 
         hits = self._index.search(query, k=pool_size)
 
