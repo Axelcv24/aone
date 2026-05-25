@@ -74,10 +74,26 @@ class SearchEmails:
         if not query or k <= 0:
             return []
 
-        # If filters are present, pull a larger candidate pool first so
-        # the filters can prune without starving the result set. The
-        # multiplier (×5, capped at 50) is a heuristic; for realistic
-        # v0 inbox sizes (~500 messages) it's a no-op.
+        # When the caller knows the exact sender they want, FAISS is
+        # the wrong layer to filter at: marketing emails from
+        # ``info@mail.levi.com`` are unlikely to be in the top-50
+        # semantic neighbours of "Levi's invoices" because the bodies
+        # never contain the word "factura". Walk the cache directly
+        # for an exact sender hit, then sort newest-first.
+        if sender and "@" in sender:
+            candidates = [
+                email
+                for email in self._cache
+                if _matches_filters(
+                    email, sender, date_from_ms, date_to_ms, label
+                )
+            ]
+            candidates.sort(key=lambda e: e.internal_date, reverse=True)
+            return candidates[:k]
+
+        # Substring senders, date/label-only filters, or pure semantic
+        # search → FAISS path with a slightly larger pool to leave room
+        # for filter pruning.
         has_filter = any(
             f is not None
             for f in (sender, date_from_ms, date_to_ms, label)

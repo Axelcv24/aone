@@ -16,6 +16,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from aone.agent.sender_match import extract_sender_filter
 from aone.agent.tools.amounts import AggregateAmounts, AggregateResult
 from aone.agent.tools.contacts import Contact, ListContacts
 from aone.agent.tools.search import SearchEmails
@@ -63,6 +64,7 @@ class ExecuteTools:
         *,
         search_k: int = DEFAULT_SEARCH_K,
     ) -> None:
+        self._cache = cache
         self._search_k = search_k
         self._search = SearchEmails(cache, index)
         self._get_thread = GetThread(cache)
@@ -91,10 +93,14 @@ class ExecuteTools:
         """
         accumulator = _Accumulator()
 
+        sender_filter = extract_sender_filter(question, self._cache)
+
         for name in tool_names:
             if name == "search_emails":
                 accumulator.search_emails = self._search(
-                    query=question, k=self._search_k
+                    query=question,
+                    sender=sender_filter,
+                    k=self._search_k,
                 )
             elif name == "list_contacts":
                 accumulator.list_contacts = self._list_contacts()

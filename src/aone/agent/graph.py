@@ -80,7 +80,7 @@ def build_agent(
         an :class:`AgentState` with ``response`` populated.
     """
     executor = ExecuteTools(cache, index, llm_client)
-    responder = GenerateResponse(llm_client)
+    responder = GenerateResponse(llm_client, cache=cache)
 
     def classify_node(state: AgentState) -> dict:
         intent = classify_intent(state["question"], client=llm_client)

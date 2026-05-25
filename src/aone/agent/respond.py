@@ -39,6 +39,7 @@ from aone.agent.tools.summarize import ThreadSummary
 from aone.gmail.types import Email
 from aone.llm.client import LLMClient, Role
 from aone.observability.tracing import observe
+from aone.storage.cache import EmailCache
 
 DEFAULT_MAX_TOKENS = 600
 DEFAULT_TEMPERATURE = 0.3
@@ -81,8 +82,18 @@ class AgentResponse:
 class GenerateResponse:
     """LangGraph node: turn structured tool results into the final answer."""
 
-    def __init__(self, llm_client: LLMClient) -> None:
+    def __init__(
+        self,
+        llm_client: LLMClient,
+        cache: EmailCache | None = None,
+    ) -> None:
         self._llm = llm_client
+        # Inbox catalog snapshot — included in every prompt so the
+        # model knows *what exists* in the cache even when search hits
+        # don't surface the relevant emails. Cheap (one walk over the
+        # cache at agent-build time); huge quality win for questions
+        # like "do I have emails from Levi?".
+        self._inbox_catalog = _render_inbox_catalog(cache) if cache else ""
 
     @observe(name="generate_response")
     def __call__(
@@ -122,9 +133,12 @@ class GenerateResponse:
             )
 
         context = _build_context(intent, tool_results)
+        system_prompt = _SYSTEM_PROMPT
+        if self._inbox_catalog:
+            system_prompt += "\n\n" + self._inbox_catalog
         result = self._llm.complete(
             messages=[
-                {"role": "system", "content": _SYSTEM_PROMPT},
+                {"role": "system", "content": system_prompt},
                 {
                     "role": "user",
                     "content": f"Question: {question}\n\n{context}",
@@ -280,6 +294,46 @@ def _render_emails(emails: list[Email]) -> str:
 
 
 # ─── Small formatting helpers ────────────────────────────────────────
+
+
+def _render_inbox_catalog(cache: EmailCache, top_n: int = 10) -> str:
+    """Render a brief snapshot of what the cache contains.
+
+    Goes into the system prompt so the model knows the inbox's shape
+    (total size, date range, top senders) even when ``search_emails``
+    didn't surface the relevant messages. Important for honest answers
+    on "do I have emails from X?" — without this the model defaults to
+    "no" when search comes back empty, even though the sender is in
+    the cache.
+    """
+    stats = cache.stats(top_n=top_n)
+    if stats.email_count == 0:
+        return ""
+
+    lines = [
+        "── Inbox catalog (what's in the local cache) ──",
+        f"Total messages: {stats.email_count}",
+    ]
+    if stats.earliest_internal_date and stats.latest_internal_date:
+        from datetime import datetime, timezone
+
+        earliest = datetime.fromtimestamp(
+            stats.earliest_internal_date / 1000, tz=timezone.utc
+        ).strftime("%Y-%m-%d")
+        latest = datetime.fromtimestamp(
+            stats.latest_internal_date / 1000, tz=timezone.utc
+        ).strftime("%Y-%m-%d")
+        lines.append(f"Date range: {earliest} → {latest}")
+    if stats.top_senders:
+        lines.append(f"Top {len(stats.top_senders)} senders:")
+        for address, count in stats.top_senders:
+            lines.append(f"  - {address}: {count} message(s)")
+    lines.append(
+        "Use this catalog to give honest answers about whether a sender "
+        "is present in the inbox, even if the email context below "
+        "doesn't include their messages this turn."
+    )
+    return "\n".join(lines)
 
 
 def _fmt(amount: Decimal) -> str:
