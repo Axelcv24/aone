@@ -1,9 +1,23 @@
 """``search_emails`` tool (AONE-403).
 
-Semantic search over the FAISS index with optional metadata filters
-(sender, date range, Gmail label). Returns the top-k matching
-:class:`Email` instances, ranked by L2 distance against the query
-embedding.
+Hybrid search over the local cache + FAISS index with optional
+metadata filters (sender, date range, Gmail label). Returns the top-k
+matching :class:`Email` instances.
+
+Retrieval strategy:
+
+1. **Literal identifier match** — if the query contains a distinctive
+   token (invoice #, order #, alphanumeric ID), scan ``subject`` and
+   ``body_clean`` for a direct substring hit. Pure semantic search
+   misses these consistently because two emails containing
+   ``#318900206`` are not necessarily semantically near each other.
+2. **Vector search** — FAISS over the embedded ``body_clean``.
+3. Filters (sender / date / label) apply after both stages and the
+   union is deduplicated.
+
+The literal stage always runs first so an exact identifier match
+floats to the top, even when the embedder ranks the email far from
+the query.
 
 The class is callable so it composes naturally with the
 ``execute_tools`` registry (AONE-408): the registry holds one instance
@@ -16,12 +30,22 @@ wrapping job, not a rewrite (ADR-004).
 
 from __future__ import annotations
 
+import re
 from typing import Any
 
 from aone.gmail.addresses import extract_email_address
 from aone.gmail.types import Email
 from aone.storage.cache import EmailCache
 from aone.storage.vector import VectorIndex
+
+# Distinctive identifiers users mention in queries: invoice/order numbers
+# (``#318900206``, ``1042``), structured IDs (``ABC-123``, ``Q3-2026``).
+# ≥5 digits avoids matching short years or counts; the ``#`` prefix is
+# optional because users write both ``#1042`` and ``1042``.
+_IDENTIFIER_RE = re.compile(
+    r"#\w{3,}|\b\d{5,}\b|\b[A-Z]{2,}-?\d{3,}\b",
+    re.IGNORECASE,
+)
 
 
 class SearchEmails:
@@ -74,6 +98,13 @@ class SearchEmails:
         if not query or k <= 0:
             return []
 
+        # Stage 1: literal identifier matches. If the user mentioned a
+        # specific number or code that appears verbatim in any cached
+        # email's subject/body, surface those first regardless of
+        # semantic similarity. Floors the failure mode where the
+        # embedder ranks the right email out of the candidate pool.
+        literal_hits = _find_identifier_matches(query, self._cache)
+
         has_filter = any(
             f is not None
             for f in (sender, date_from_ms, date_to_ms, label)
@@ -98,14 +129,30 @@ class SearchEmails:
 
         hits = self._index.search(query, k=pool_size)
 
+        # Merge: literal identifier hits first (in order found), then
+        # FAISS hits, deduped by email id.
         results: list[Email] = []
+        seen_ids: set[str] = set()
+        for email in literal_hits:
+            if email.id in seen_ids:
+                continue
+            if not _matches_filters(email, sender, date_from_ms, date_to_ms, label):
+                continue
+            results.append(email)
+            seen_ids.add(email.id)
+            if len(results) >= k:
+                return results
+
         for email_id, _distance in hits:
+            if email_id in seen_ids:
+                continue
             email = self._cache.get(email_id)
             if email is None:
                 continue
             if not _matches_filters(email, sender, date_from_ms, date_to_ms, label):
                 continue
             results.append(email)
+            seen_ids.add(email.id)
             if len(results) >= k:
                 break
 
@@ -153,6 +200,25 @@ class SearchEmails:
             },
             "required": ["query"],
         }
+
+
+def _find_identifier_matches(query: str, cache: EmailCache) -> list[Email]:
+    """Find cache emails whose subject/body contains an identifier from ``query``.
+
+    Used by ``SearchEmails.__call__`` to compose hybrid retrieval:
+    literal hits are returned first so an exact ``#318900206`` always
+    floats above the FAISS ranking, no matter the semantic distance.
+    """
+    identifiers = {m.group(0).lstrip("#").lower() for m in _IDENTIFIER_RE.finditer(query)}
+    if not identifiers:
+        return []
+
+    matches: list[Email] = []
+    for email in cache:
+        haystack = (email.subject + " " + email.body_clean).lower()
+        if any(identifier in haystack for identifier in identifiers):
+            matches.append(email)
+    return matches
 
 
 def _matches_filters(
