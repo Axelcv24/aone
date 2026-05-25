@@ -15,6 +15,7 @@ from __future__ import annotations
 
 from aone.agent.intents import Intent
 from aone.llm.client import LLMClient, Role
+from aone.observability.tracing import observe
 
 _SYSTEM_PROMPT = """\
 Classify the question into ONE intent. Reply with ONLY the intent name (lowercase, nothing else).
@@ -28,6 +29,7 @@ general_qa: everything else (greetings, capability questions, ambiguous)
 Pick the most specific. Reply with one word only."""
 
 
+@observe(name="classify_intent")
 def classify_intent(question: str, client: LLMClient | None = None) -> Intent:
     """Predict the intent of ``question``.
 

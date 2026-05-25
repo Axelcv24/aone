@@ -32,6 +32,7 @@ from aone.config import ConfigError, load_config
 from aone.gmail.auth import GmailAuthError, get_service
 from aone.llm.client import LLMClient
 from aone.llm.embeddings import get_embedder
+from aone.observability.tracing import init_tracing
 from aone.storage.cache import DEFAULT_CACHE_PATH, EmailCache
 from aone.storage.vector import (
     DEFAULT_INDEX_PATH,
@@ -156,6 +157,11 @@ def ask(
     except ConfigError as exc:
         _console.print(f"[red]Configuration error:[/red] {exc}")
         raise typer.Exit(code=1) from exc
+
+    if init_tracing(config):
+        _console.print(
+            f"[dim]Tracing → {config.langfuse_host}[/dim]"
+        )
 
     if not DEFAULT_CACHE_PATH.exists():
         _console.print(

@@ -23,6 +23,7 @@ from aone.agent.tools.summarize import SummarizeThread, ThreadSummary
 from aone.agent.tools.thread import GetThread
 from aone.gmail.types import Email
 from aone.llm.client import LLMClient
+from aone.observability.tracing import observe
 from aone.storage.cache import EmailCache
 from aone.storage.vector import VectorIndex
 
@@ -69,6 +70,7 @@ class ExecuteTools:
         self._aggregate = AggregateAmounts(cache, llm_client)
         self._summarize = SummarizeThread(cache, llm_client)
 
+    @observe(name="execute_tools")
     def __call__(
         self,
         *,

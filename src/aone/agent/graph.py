@@ -32,6 +32,7 @@ from aone.agent.intents import Intent
 from aone.agent.respond import AgentResponse, GenerateResponse
 from aone.agent.select_tools import select_tools
 from aone.llm.client import LLMClient
+from aone.observability.tracing import observe
 from aone.storage.cache import EmailCache
 from aone.storage.vector import VectorIndex
 
@@ -118,6 +119,7 @@ def build_agent(
     return graph.compile()
 
 
+@observe(name="aone-ask")
 def ask(agent: CompiledStateGraph, question: str) -> AgentResponse:
     """Run ``question`` through ``agent`` and return the final response.
 

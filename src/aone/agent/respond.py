@@ -38,6 +38,7 @@ from aone.agent.tools.contacts import Contact
 from aone.agent.tools.summarize import ThreadSummary
 from aone.gmail.types import Email
 from aone.llm.client import LLMClient, Role
+from aone.observability.tracing import observe
 
 DEFAULT_MAX_TOKENS = 600
 DEFAULT_TEMPERATURE = 0.3
@@ -83,6 +84,7 @@ class GenerateResponse:
     def __init__(self, llm_client: LLMClient) -> None:
         self._llm = llm_client
 
+    @observe(name="generate_response")
     def __call__(
         self,
         *,
