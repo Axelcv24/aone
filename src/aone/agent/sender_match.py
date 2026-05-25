@@ -73,7 +73,16 @@ def extract_sender_filter(question: str, cache: EmailCache) -> str | None:
         for sender_address in senders:
             for part in _domain_parts(sender_address):
                 if _token_matches(token, part):
-                    return sender_address
+                    # Return the brand token (substring) — not the
+                    # full email address. The same brand commonly
+                    # spans multiple addresses (e.g. marketing
+                    # ``info@mail.levi.com`` and transactional
+                    # ``info@info.levi.com``); returning the full
+                    # address would over-filter to one of them.
+                    # search_emails treats sender values without
+                    # ``@`` as substring matches against the parsed
+                    # bare address, so "levi" catches both.
+                    return part
 
     return None
 

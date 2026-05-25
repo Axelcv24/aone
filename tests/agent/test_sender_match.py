@@ -53,17 +53,18 @@ def test_lowercases_explicit_email() -> None:
 # ─── Brand / domain token fuzzy matching ─────────────────────────────
 
 
-def test_matches_brand_in_question_against_known_sender_domain() -> None:
+def test_matches_brand_returns_substring_filter_not_full_address() -> None:
+    """Brand tokens map to the domain part (substring), not the full
+    email address. One brand often has multiple senders (marketing
+    vs. transactional) — substring catches all of them."""
     cache = _cache(
-        _email("a", from_="info@mail.levi.com"),
-        _email("b", from_="quiksilver@k.quiksilver.com"),
+        _email("a", from_="info@mail.levi.com"),       # marketing
+        _email("b", from_="info@info.levi.com"),       # transactional
+        _email("c", from_="quiksilver@k.quiksilver.com"),
     )
 
-    levi_q = extract_sender_filter("facturas de Levi", cache)
-    quik_q = extract_sender_filter("ofertas de quiksilver", cache)
-
-    assert levi_q == "info@mail.levi.com"
-    assert quik_q == "quiksilver@k.quiksilver.com"
+    assert extract_sender_filter("facturas de Levi", cache) == "levi"
+    assert extract_sender_filter("ofertas de quiksilver", cache) == "quiksilver"
 
 
 def test_returns_none_when_brand_not_in_cache() -> None:
@@ -125,10 +126,10 @@ def test_strips_possessive_apostrophe_s_to_match_brand() -> None:
     part. This is exactly the bug we caught testing in dev: the
     apostrophe-s broke the equality check."""
     cache = _cache(_email("m", from_="info@mail.levi.com"))
-    assert extract_sender_filter("facturas de Levi's", cache) == "info@mail.levi.com"
+    assert extract_sender_filter("facturas de Levi's", cache) == "levi"
 
 
 def test_strips_curly_apostrophe_s_too() -> None:
     """macOS keyboards default to ' (curly apostrophe). Same fix."""
     cache = _cache(_email("m", from_="info@mail.levi.com"))
-    assert extract_sender_filter("facturas de Levi’s", cache) == "info@mail.levi.com"
+    assert extract_sender_filter("facturas de Levi’s", cache) == "levi"

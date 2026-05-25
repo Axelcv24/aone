@@ -80,20 +80,19 @@ class SearchEmails:
         )
 
         # Pool sizing: when a structural filter is active (sender,
-        # date, label), we need a big enough candidate pool that the
-        # filter can find the right matches. Specifically the bug we
-        # caught: 50-candidate semantic pool didn't contain Levi
-        # marketing emails (they're not semantically near "facturas"),
-        # so the sender filter had nothing to keep.
+        # date, label), we ask FAISS for the ENTIRE index. Without
+        # this, cross-language queries against a brand's emails fail:
+        # for "muéstrame mi confirmación de Levi" (Spanish) against
+        # an English marketing inbox, all 123 Levi emails sit outside
+        # the top 1000 by FAISS distance. A cap of 1000 throws them
+        # away before the filter ever sees them.
         #
-        # Fix: when filtering, ask FAISS for up to 1000 candidates
-        # (capped at index size). That way semantic ranking still
-        # decides ORDER within the filtered subset — so "Levi's order
-        # confirmation #318900206" surfaces the actual confirmation
-        # email above generic marketing — but the candidate pool is
-        # broad enough that filtered senders aren't starved.
+        # The cost is bounded — FAISS IndexFlatL2 is linear in index
+        # size; at 2000 emails this is sub-millisecond. The filter
+        # then narrows to the relevant subset, and the loop break
+        # at len(results) >= k still short-circuits cheaply.
         if has_filter:
-            pool_size = min(len(self._index), max(k * 5, 1000))
+            pool_size = len(self._index)
         else:
             pool_size = k
 
