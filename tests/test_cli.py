@@ -176,6 +176,103 @@ def test_ask_happy_path_prints_response_text_and_metadata(
     assert "groq/llama-3.3-70b-versatile" in result.stdout
 
 
+# ─── aone stats ──────────────────────────────────────────────────────
+
+
+def test_stats_without_cache_exits_with_guidance(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    _redirect_paths(monkeypatch, tmp_path)
+    result = runner.invoke(app, ["stats"])
+    assert result.exit_code == 1
+    assert "No cache yet" in result.stdout
+    assert "aone sync" in result.stdout
+
+
+def test_stats_shows_counts_and_top_senders(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    cache_path, _ = _redirect_paths(monkeypatch, tmp_path)
+    cache = EmailCache()
+    # Three senders with distinct counts so the ranking is deterministic.
+    cache.add(_email("a"))  # alice@x.com (1)
+    second = _email("b")
+    cache.add(
+        Email(  # type: ignore[name-defined]
+            id="c",
+            thread_id="t-c",
+            from_="bob@y.com",
+            to=["axel@example.com"],
+            subject="s",
+            body_text="b",
+            body_html="<p>b</p>",
+            body_clean="b",
+            snippet="b",
+            internal_date=1_700_000_100_000,
+            labels=["INBOX"],
+        )
+    )
+    cache.add(
+        Email(  # type: ignore[name-defined]
+            id="d",
+            thread_id="t-d",
+            from_="bob@y.com",
+            to=["axel@example.com"],
+            subject="s",
+            body_text="b",
+            body_html="<p>b</p>",
+            body_clean="b",
+            snippet="b",
+            internal_date=1_700_000_200_000,
+            labels=["INBOX"],
+        )
+    )
+    cache.add(second)
+    cache.save(cache_path)
+
+    result = runner.invoke(app, ["stats"])
+
+    assert result.exit_code == 0
+    assert "Messages:" in result.stdout
+    assert "4" in result.stdout  # 4 messages
+    # bob@y.com should be the top sender (2 messages)
+    assert "bob@y.com" in result.stdout
+    assert "alice@x.com" in result.stdout
+
+
+def test_stats_respects_top_flag(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    cache_path, _ = _redirect_paths(monkeypatch, tmp_path)
+    cache = EmailCache()
+    # Create 4 different senders so we can verify --top=2 caps the list.
+    for i in range(4):
+        cache.add(
+            Email(  # type: ignore[name-defined]
+                id=f"m{i}",
+                thread_id=f"t-{i}",
+                from_=f"user{i}@x.com",
+                to=["axel@example.com"],
+                subject="s",
+                body_text="b",
+                body_html="<p>b</p>",
+                body_clean="b",
+                snippet="b",
+                internal_date=1_700_000_000_000 + i,
+                labels=["INBOX"],
+            )
+        )
+    cache.save(cache_path)
+
+    result = runner.invoke(app, ["stats", "--top", "2"])
+
+    assert result.exit_code == 0
+    # Two of the four addresses appear in the rendered ranking section;
+    # we can't easily assert which two given the equal counts, but the
+    # header should reflect the cap.
+    assert "Top 2 sender(s)" in result.stdout
+
+
 def test_ask_no_metadata_flag_hides_intent_block(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:

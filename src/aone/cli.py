@@ -2,6 +2,20 @@
 
 from __future__ import annotations
 
+import os
+
+# Silence the HuggingFace "Loading weights" tqdm bar and other library
+# noise. The CLI owns stdout — we don't want sentence-transformers
+# bleeding progress bars into the user's terminal during `aone ask`.
+# Must be set before any HF / transformers import; the rest of the
+# imports below are first-touch for HF, so this is the right place.
+os.environ.setdefault("HF_HUB_DISABLE_PROGRESS_BARS", "1")
+os.environ.setdefault("TRANSFORMERS_VERBOSITY", "error")
+# LiteLLM emits warnings at import time for AWS Bedrock / SageMaker
+# preload failures that we genuinely don't care about (no botocore
+# installed because Aone doesn't use AWS). Suppress at module level.
+os.environ.setdefault("LITELLM_LOG", "ERROR")
+
 import typer
 from rich.console import Console
 from rich.panel import Panel
@@ -203,15 +217,62 @@ def ask(
 
 
 @app.command()
-def stats() -> None:
+def stats(
+    top: int = typer.Option(5, "--top", help="How many top senders to list."),
+) -> None:
     """Show local cache statistics."""
-    raise NotImplementedError("AONE-503 — pending in Sprint 5")
+    if not DEFAULT_CACHE_PATH.exists():
+        _console.print(
+            "[yellow]No cache yet.[/yellow] Run [bold]`aone sync`[/bold] first."
+        )
+        raise typer.Exit(code=1)
+
+    cache = EmailCache.load(DEFAULT_CACHE_PATH)
+    info = cache.stats(top_n=top)
+
+    _console.print(
+        f"[bold]Aone cache[/bold] [dim]({DEFAULT_CACHE_PATH})[/dim]"
+    )
+    _console.print(f"  Messages:  [bold]{info.email_count}[/bold]")
+
+    if info.disk_size_bytes is not None:
+        _console.print(f"  Disk size: {_format_bytes(info.disk_size_bytes)}")
+
+    if info.earliest_internal_date and info.latest_internal_date:
+        _console.print(
+            f"  Date range: {_format_ms(info.earliest_internal_date)} "
+            f"→ {_format_ms(info.latest_internal_date)}"
+        )
+
+    if info.top_senders:
+        _console.print(f"\n[bold]Top {len(info.top_senders)} sender(s)[/bold]")
+        max_count_width = len(str(info.top_senders[0][1]))
+        for address, count in info.top_senders:
+            _console.print(f"  [cyan]{count:>{max_count_width}}[/cyan]  {address}")
+    else:
+        _console.print("\n[dim]No senders to rank (cache empty).[/dim]")
 
 
 @app.command()
 def evals() -> None:
     """Run the RAGAS evaluation suite."""
     raise NotImplementedError("AONE-504 — pending in Sprint 5")
+
+
+def _format_bytes(num: int) -> str:
+    """Human-friendly file size: 5,265 B → '5.1 KB'."""
+    for unit in ("B", "KB", "MB", "GB"):
+        if num < 1024:
+            return f"{num:.1f} {unit}" if unit != "B" else f"{num} {unit}"
+        num = num // 1024 if unit == "B" else num / 1024  # type: ignore[assignment]
+    return f"{num:.1f} TB"
+
+
+def _format_ms(ms: int) -> str:
+    """Format a ms-epoch timestamp as YYYY-MM-DD."""
+    from datetime import datetime, timezone
+
+    return datetime.fromtimestamp(ms / 1000, tz=timezone.utc).strftime("%Y-%m-%d")
 
 
 def _load_or_rebuild_index(embedder: object, cache: EmailCache) -> VectorIndex:
