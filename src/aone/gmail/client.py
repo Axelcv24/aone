@@ -19,10 +19,19 @@ from collections.abc import Callable
 from email.utils import getaddresses
 from typing import Any, TypeVar
 
+import html2text
 from googleapiclient.errors import HttpError
 
 from aone.gmail.normalize import normalize
 from aone.gmail.types import Email
+
+# Configured once at module import; cheap to reuse.
+_HTML2TEXT = html2text.HTML2Text()
+_HTML2TEXT.ignore_links = True       # URLs add noise to embeddings
+_HTML2TEXT.ignore_images = True      # alt text not worth the noise
+_HTML2TEXT.body_width = 0            # don't hard-wrap — preserves long amounts on one line
+_HTML2TEXT.unicode_snob = True       # keep ñ/é/€ instead of escaping
+_HTML2TEXT.skip_internal_links = True
 
 T = TypeVar("T")
 
@@ -128,6 +137,14 @@ def _parse_message(raw: dict[str, Any]) -> Email:
     headers = {h["name"]: h["value"] for h in payload.get("headers", [])}
     body_text, body_html = _extract_bodies(payload)
 
+    # Marketing and transactional emails are routinely HTML-only with
+    # no text/plain alternative — in that case body_text is empty and
+    # the agent sees nothing. Fall back to converting the HTML so the
+    # visible text (including amounts, order numbers, headlines) ends
+    # up in body_text and feeds through normalize → body_clean → FAISS.
+    if not body_text.strip() and body_html.strip():
+        body_text = _html_to_text(body_html)
+
     return Email(
         id=raw["id"],
         thread_id=raw["threadId"],
@@ -170,6 +187,20 @@ def _extract_bodies(part: dict[str, Any]) -> tuple[str, str]:
 
     walk(part)
     return text_plain, text_html
+
+
+def _html_to_text(html: str) -> str:
+    """Convert HTML email body to plain text.
+
+    Used as a fallback when an email has no ``text/plain`` MIME part
+    (common in marketing/transactional emails). Tries to keep
+    line-level structure so amounts on their own line stay visible
+    while stripping links, images, CSS, and tracking pixels.
+    """
+    try:
+        return _HTML2TEXT.handle(html).strip()
+    except Exception:  # noqa: BLE001 — never let HTML parsing crash a sync
+        return ""
 
 
 def _decode_b64url(data: str) -> str:

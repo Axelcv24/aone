@@ -44,6 +44,11 @@ from aone.storage.cache import EmailCache
 DEFAULT_MAX_TOKENS = 600
 DEFAULT_TEMPERATURE = 0.3
 MAX_EMAILS_IN_CONTEXT = 8
+# Per-email body excerpt sent to the LLM. Snippet (200 chars) is too
+# little — totals, dates, status often live deeper in the body. 2000
+# chars × 8 emails ≈ 4000 tokens of email content, comfortable under
+# Llama 3.3's 128k window.
+MAX_BODY_CHARS_PER_EMAIL = 2000
 
 NO_RESULTS_RESPONSE = (
     "I couldn't find anything in your inbox that answers that question. "
@@ -283,12 +288,19 @@ def _render_emails(emails: list[Email]) -> str:
     capped = emails[:MAX_EMAILS_IN_CONTEXT]
     lines = [f"=== Email context ({len(capped)} of {len(emails)} shown) ==="]
     for e in capped:
+        # Prefer the cleaned body; fall back to snippet for emails
+        # whose body normalization stripped everything.
+        body = (e.body_clean or e.snippet or "").strip()
+        truncated = len(body) > MAX_BODY_CHARS_PER_EMAIL
+        excerpt = body[:MAX_BODY_CHARS_PER_EMAIL]
+        if truncated:
+            excerpt += "\n[…body truncated…]"
         lines.append(
             f"\n[Email {e.id}]\n"
             f"From: {e.from_}\n"
             f"Date: {_fmt_date(e.internal_date)}\n"
             f"Subject: {e.subject}\n"
-            f"Snippet: {e.snippet[:200]}"
+            f"Body:\n{excerpt}"
         )
     return "\n".join(lines)
 
